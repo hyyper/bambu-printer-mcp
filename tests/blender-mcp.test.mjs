@@ -171,6 +171,28 @@ test("Blender standard edit previews without launching and exports a verified ne
   assert.deepEqual(fs.readdirSync(peer.directory).sort(), [path.basename(output), "peer.jsonl"].sort());
 });
 
+test("Blender Lab's official server: edits send only code, read the result dict, and treat status error as failure", async (t) => {
+  for (const mode of ["official", "official-stdout", "official-null"]) await t.test(mode, async (t) => {
+    const peer = await start(t, mode);
+    const output = path.join(peer.directory, "edited.stl");
+    const result = await peer.call("blender_mcp_edit_model", { stl_path: sample, output_path: output, operations: ["decimate:0.5"], user_prompt: "Reduce this mesh", execute: true });
+    assert.equal(result.isError, undefined, errorText(result));
+    assert.equal(data(result).status, "success");
+    assert.equal(fs.statSync(output).size, 134);
+    const call = peer.events().find((event) => event.method === "tools/call");
+    assert.deepEqual(Object.keys(call.params.arguments), ["code"], "the official schema has no user_prompt");
+  });
+  await t.test("status error", async (t) => {
+    const peer = await start(t, "official-error");
+    const output = path.join(peer.directory, "edited.stl");
+    const edit = await peer.call("blender_mcp_edit_model", { stl_path: sample, output_path: output, operations: ["decimate:0.5"], execute: true });
+    assert.equal(edit.isError, true);
+    assert.equal(fs.existsSync(output), false);
+    const call = await peer.call("blender_mcp_call", { tool_name: "execute_blender_code", arguments: { code: "pass" } });
+    assert.equal(call.isError, true, "a status error result is a tool failure");
+  });
+});
+
 test("Blender edit discovery requires output_path for standard MCP while preserving legacy-only requests", async (t) => {
   await t.test("standard configuration advertises the output required by preview and execution", async (t) => {
     const peer = await start(t);

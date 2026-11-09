@@ -2998,7 +2998,7 @@ class BambuPrinterMCPServer {
                     },
                     {
                         name: "blender_mcp_call",
-                        description: "Call a discovered tool on the configured Blender MCP server, preserving its full MCP content and errors. Discover tool schemas with blender_mcp_status first; execute_blender_code accepts Python code and user_prompt. Calls can modify the active Blender scene and are never automatically retried.",
+                        description: "Call a discovered tool on the configured Blender MCP server, preserving its full MCP content and errors. Discover tool schemas with blender_mcp_status first; execute_blender_code accepts Python code, plus user_prompt when its discovered schema lists it (Blender Lab's official server takes code only). Calls can modify the active Blender scene and are never automatically retried.",
                         inputSchema: {
                             type: "object",
                             properties: {
@@ -3025,7 +3025,7 @@ class BambuPrinterMCPServer {
                                     items: { type: "string" }
                                 },
                                 output_path: { type: "string", description: "Required for standard MCP previews and execution: new local STL output path whose parent exists. Existing files are never overwritten. Optional for legacy-only bridge configuration." },
-                                user_prompt: { type: "string", description: "The user's own words describing the edit, passed unchanged to Blender MCP." },
+                                user_prompt: { type: "string", description: "The user's own words describing the edit, passed unchanged to Blender MCP when its execute_blender_code schema accepts user_prompt; Blender Lab's official server takes code only, so it is not sent there." },
                                 timeout_ms: { type: "integer", minimum: 100, maximum: 300000, description: "Total Blender request deadline in milliseconds; defaults to BLENDER_MCP_TIMEOUT_MS or 120000." },
                                 bridge_command: { type: "string", description: "Legacy custom bridge executable override, not a standard MCP command. Per-call overrides require MCP_ALLOW_EXECUTABLE_ARG=1." },
                                 execute: { type: "boolean", description: "Apply edits and export (true) or validate and return the prepared request without connecting (false, default)." }

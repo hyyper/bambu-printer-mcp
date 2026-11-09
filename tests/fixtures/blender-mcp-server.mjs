@@ -8,6 +8,10 @@ const send = (id, result) => process.stdout.write(`${JSON.stringify({ jsonrpc: "
 const fail = (id, code, message) => process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`);
 const sceneTool = { name: "get_scene_info", inputSchema: { type: "object", properties: { user_prompt: { type: "string" } }, required: ["user_prompt"] } };
 const codeTool = { name: "execute_blender_code", inputSchema: { type: "object", properties: { code: { type: "string" }, user_prompt: { type: "string" } }, required: ["code"] } };
+// Blender Lab's official server (projects.blender.org/lab/blender_mcp): FastMCP schema with code only, and the add-on's
+// response object ({status, result, stdout}) as structuredContent plus its JSON text.
+const officialCodeTool = { name: "execute_blender_code", inputSchema: { type: "object", title: "execute_blender_codeArguments", properties: { code: { type: "string", title: "Code" } }, required: ["code"] } };
+const official = (id, response) => send(id, { content: [{ type: "text", text: JSON.stringify(response, null, 2) }], structuredContent: response, isError: false });
 // MCP for Blender's own handshake (mode "addon"): the running add-on is protocol 14, the package expects 15.
 const addonTool = { name: "get_addon_status", inputSchema: { type: "object", properties: {} } };
 const reader = readline.createInterface({ input: process.stdin });
@@ -23,6 +27,7 @@ reader.on("line", (line) => {
     if (mode === "list-timeout") return;
     if (mode === "list-error") return fail(request.id, -32603, "list failed secret-should-not-leak");
     if (mode === "missing-tool") return send(request.id, { tools: [sceneTool] });
+    if (mode.startsWith("official")) return send(request.id, { tools: [officialCodeTool] });
     if (mode === "addon") return send(request.id, { tools: [sceneTool, codeTool, addonTool] });
     return send(request.id, request.params?.cursor ? { tools: [codeTool] } : { tools: [sceneTool], nextCursor: "page-two" });
   }
@@ -37,6 +42,7 @@ reader.on("line", (line) => {
   if (request.params.name === "get_addon_status") return send(request.id, { content: [{ type: "text",
     text: JSON.stringify({ up_to_date: false, protocol_version: 14, expected_protocol_version: 15, addon_version: [1, 2, 0], blender_version: "5.0.1" }) }] });
   if (typeof args?.code !== "string") return fail(request.id, -32602, "code required");
+  if (mode === "official-error") return official(request.id, { status: "error", message: "Traceback (most recent call last):\nRuntimeError: STL export did not finish\n" });
   const planLine = args.code.split("\n").find((line) => line.startsWith("# BAMBU_EDIT_PLAN "));
   if (planLine) {
     const plan = JSON.parse(planLine.slice("# BAMBU_EDIT_PLAN ".length));
@@ -50,6 +56,13 @@ reader.on("line", (line) => {
     }
     if (mode === "output-race") fs.writeFileSync(plan.outputPath, "created after preflight");
     const receipt = { requestId: mode === "wrong-receipt" ? "wrong" : plan.requestId, outputPath: plan.stagedOutputPath };
+    if (mode === "official" || mode === "official-stdout" || mode === "official-null") {
+      // The add-on returns the script's global `result` dict; the printed line arrives JSON-escaped inside stdout.
+      // "official-stdout": an add-on that returns only stdout; "official-null": a null result next to a valid printed line.
+      const result = mode === "official-stdout" ? {} : mode === "official-null" ? { bambu_stl_result: null }
+        : args.code.includes("result = {'bambu_stl_result': ") ? { bambu_stl_result: receipt } : {};
+      return official(request.id, { status: "ok", result, stdout: `BAMBU_STL_RESULT:${JSON.stringify(receipt)}\n` });
+    }
     return send(request.id, { content: [{ type: "text", text: `Code executed successfully: BAMBU_STL_RESULT:${JSON.stringify(receipt)}\n` }] });
   }
   return send(request.id, {
