@@ -4,7 +4,7 @@
 
 ### Added
 
-- Blender Lab's official MCP server works with `blender_mcp_edit_model`. The edit script also returns its export receipt in the `result` dict that server reads, and `user_prompt` is sent only to an `execute_blender_code` whose schema accepts it. The README documents the `uv --directory … run blender-mcp` configuration
+- Blender Lab's official MCP server works with `blender_mcp_edit_model`. The edit script also returns its export receipt in the `result` dict that server reads, and `user_prompt` is sent only to an `execute_blender_code` whose schema accepts it. The bridge accepts only a receipt matching the request, from that dict or a printed line, including one escaped inside a JSON `stdout` field, and the `blender_mcp_call` and `blender_mcp_edit_model` descriptions say when `user_prompt` is sent. The README documents the `uv --directory … run blender-mcp` configuration
 
 ## [1.1.80] – 2026-11-09
 

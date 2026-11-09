@@ -172,8 +172,8 @@ test("Blender standard edit previews without launching and exports a verified ne
 });
 
 test("Blender Lab's official server: edits send only code, read the result dict, and treat status error as failure", async (t) => {
-  await t.test("success", async (t) => {
-    const peer = await start(t, "official");
+  for (const mode of ["official", "official-stdout", "official-null"]) await t.test(mode, async (t) => {
+    const peer = await start(t, mode);
     const output = path.join(peer.directory, "edited.stl");
     const result = await peer.call("blender_mcp_edit_model", { stl_path: sample, output_path: output, operations: ["decimate:0.5"], user_prompt: "Reduce this mesh", execute: true });
     assert.equal(result.isError, undefined, errorText(result));

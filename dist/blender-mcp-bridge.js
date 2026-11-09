@@ -394,25 +394,27 @@ export class BlenderMcpBridge {
             });
             if (result.isError)
                 throw new BlenderError("Blender MCP reported an editing error. No output was published.");
+            // Receipt candidates, structured first: the official server's `result` dict (and its JSON text), then printed
+            // lines, read from raw text and from a JSON response's stdout field, where they arrive escaped. Only a match counts.
             const texts = result.content.flatMap((entry) => entry.type === "text" ? [entry.text] : []);
-            const resultReceipt = (value) => value?.result?.bambu_stl_result;
-            let receipt = resultReceipt(result.structuredContent);
-            for (const text of texts) {
-                if (receipt !== undefined)
-                    break;
-                try {
-                    receipt = resultReceipt(JSON.parse(text));
+            const responses = [result.structuredContent, ...texts.flatMap((text) => { try {
+                    return [JSON.parse(text)];
                 }
-                catch { /* Not the official server's JSON response. */ }
-            }
-            if (receipt === undefined) {
-                const receipts = [...texts.join("\n").matchAll(/BAMBU_STL_RESULT:(\{[^\n]*\})/g)];
+                catch {
+                    return [];
+                } })];
+            const printed = [...texts, ...responses.flatMap((response) => typeof response?.stdout === "string" ? [response.stdout] : [])].join("\n");
+            const printedReceipts = [...printed.matchAll(new RegExp(`${RECEIPT_PREFIX}(\\{[^\\n]*\\})`, "g"))].reverse().map((match) => {
                 try {
-                    receipt = JSON.parse(receipts.at(-1)?.[1] ?? "null");
+                    return JSON.parse(match[1]);
                 }
-                catch { /* Invalid receipt is a failure. */ }
-            }
-            if (receipt?.requestId !== plan.requestId || receipt?.outputPath !== plan.stagedOutputPath)
+                catch {
+                    return undefined;
+                }
+            });
+            const receipt = [...responses.map((response) => response?.result?.bambu_stl_result), ...printedReceipts]
+                .find((candidate) => candidate?.requestId === plan.requestId && candidate?.outputPath === plan.stagedOutputPath);
+            if (!receipt)
                 throw new BlenderError("Blender did not return a matching export receipt. Inspect its connection and tool result; no output was published.");
             const metadata = await regularStl(plan.stagedOutputPath);
             // link() publishes without replacing a file created since preflight; staging is on the same filesystem.
