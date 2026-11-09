@@ -1265,6 +1265,16 @@ Blender. Set the command to your full `uvx` path and the argument array to
 `["blender-mcp"]`. The Claude Desktop extension also offers these two optional
 settings. Printer tools work without Blender configured.
 
+Blender Lab's official MCP server ([blender.org/lab/mcp-server](https://www.blender.org/lab/mcp-server/),
+Blender 5.1 or newer) also works. Install its `mcp` add-on in Blender and start it, clone
+`https://projects.blender.org/lab/blender_mcp`, then set the command to your full `uv` path and the
+argument array to `["--directory", "/path/to/blender_mcp/mcp", "run", "blender-mcp"]`. Do not use
+`uvx blender-mcp` for it: that PyPI name installs the community MCP for Blender package instead.
+`blender_mcp_status`, `blender_mcp_call` and `blender_mcp_edit_model` work with either server;
+`blender_mcp_setup` manages only the MCP for Blender add-on and reports `supported: false` here. The
+official server's `execute_blender_code` takes `code` only, so `user_prompt` is not forwarded to it,
+and it reports Python errors as `status: "error"`, which these tools return as failures.
+
 `blender_mcp_setup` checks the MCP for Blender add-on that the configured
 package needs, when the bridge is that package run with `uvx`: which add-on file
 Blender loads (for the running Blender's version), its protocol and the one the

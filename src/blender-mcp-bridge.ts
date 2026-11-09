@@ -236,9 +236,12 @@ def _bambu_edit():
         for obj in selected_before:
             obj.select_set(True)
         bpy.context.view_layer.objects.active = active_before
-    print('${RECEIPT_PREFIX}' + json.dumps({'requestId': plan['requestId'], 'outputPath': plan['stagedOutputPath']}))
+    receipt = {'requestId': plan['requestId'], 'outputPath': plan['stagedOutputPath']}
+    print('${RECEIPT_PREFIX}' + json.dumps(receipt))
+    return receipt
 
-_bambu_edit()
+# Blender Lab's official server returns the global \`result\` dict; other servers return the printed line.
+result = {'bambu_stl_result': _bambu_edit()}
 del _bambu_edit
 `;
 }
@@ -345,12 +348,24 @@ export class BlenderMcpBridge {
     const code = editScript(plan);
     if (!execute) return { status: "prepared", mode: "mcp", output_path: plan.outputPath, payload: plan, code };
     try {
-      const result = await this.session(timeout, signal, (session) => this.invoke(session, "execute_blender_code", { code, user_prompt: args.user_prompt ?? "" }));
+      const result = await this.session(timeout, signal, (session) => {
+        // Blender Lab's official execute_blender_code takes code only; MCP for Blender also takes user_prompt.
+        const schema = session.tools.find((tool) => tool.name === "execute_blender_code")?.inputSchema;
+        const takesPrompt = Boolean(schema?.properties && Object.prototype.hasOwnProperty.call(schema.properties, "user_prompt"));
+        return this.invoke(session, "execute_blender_code", { code, ...(takesPrompt ? { user_prompt: args.user_prompt ?? "" } : {}) });
+      });
       if (result.isError) throw new BlenderError("Blender MCP reported an editing error. No output was published.");
-      const text = result.content.filter((entry) => entry.type === "text").map((entry) => entry.text).join("\n");
-      const receipts = [...text.matchAll(/BAMBU_STL_RESULT:(\{[^\n]*\})/g)];
-      let receipt: any;
-      try { receipt = JSON.parse(receipts.at(-1)?.[1] ?? "null"); } catch { /* Invalid receipt is a failure. */ }
+      const texts = result.content.flatMap((entry) => entry.type === "text" ? [entry.text] : []);
+      const resultReceipt = (value: unknown): unknown => (value as any)?.result?.bambu_stl_result;
+      let receipt: any = resultReceipt(result.structuredContent);
+      for (const text of texts) {
+        if (receipt !== undefined) break;
+        try { receipt = resultReceipt(JSON.parse(text)); } catch { /* Not the official server's JSON response. */ }
+      }
+      if (receipt === undefined) {
+        const receipts = [...texts.join("\n").matchAll(/BAMBU_STL_RESULT:(\{[^\n]*\})/g)];
+        try { receipt = JSON.parse(receipts.at(-1)?.[1] ?? "null"); } catch { /* Invalid receipt is a failure. */ }
+      }
       if (receipt?.requestId !== plan.requestId || receipt?.outputPath !== plan.stagedOutputPath) throw new BlenderError("Blender did not return a matching export receipt. Inspect its connection and tool result; no output was published.");
       const metadata = await regularStl(plan.stagedOutputPath);
       // link() publishes without replacing a file created since preflight; staging is on the same filesystem.
