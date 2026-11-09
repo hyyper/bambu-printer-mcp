@@ -56,9 +56,11 @@ reader.on("line", (line) => {
     }
     if (mode === "output-race") fs.writeFileSync(plan.outputPath, "created after preflight");
     const receipt = { requestId: mode === "wrong-receipt" ? "wrong" : plan.requestId, outputPath: plan.stagedOutputPath };
-    if (mode === "official") {
+    if (mode === "official" || mode === "official-stdout" || mode === "official-null") {
       // The add-on returns the script's global `result` dict; the printed line arrives JSON-escaped inside stdout.
-      const result = args.code.includes("result = {'bambu_stl_result': ") ? { bambu_stl_result: receipt } : {};
+      // "official-stdout": an add-on that returns only stdout; "official-null": a null result next to a valid printed line.
+      const result = mode === "official-stdout" ? {} : mode === "official-null" ? { bambu_stl_result: null }
+        : args.code.includes("result = {'bambu_stl_result': ") ? { bambu_stl_result: receipt } : {};
       return official(request.id, { status: "ok", result, stdout: `BAMBU_STL_RESULT:${JSON.stringify(receipt)}\n` });
     }
     return send(request.id, { content: [{ type: "text", text: `Code executed successfully: BAMBU_STL_RESULT:${JSON.stringify(receipt)}\n` }] });
